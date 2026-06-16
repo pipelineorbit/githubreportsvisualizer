@@ -400,7 +400,9 @@ function ActionsMinutesDetailedChart({
   );
 
   const topRepos = Object.entries(repoTotals)
-    .sort(([, a], [, b]) => b.cost - a.cost)
+    .sort(([, a], [, b]) =>
+      breakdown === "cost" ? b.cost - a.cost : b.quantity - a.quantity,
+    )
     .slice(0, 10)
     .map(([repo]) => repo);
 
@@ -418,7 +420,9 @@ function ActionsMinutesDetailedChart({
   );
 
   const topSkus = Object.entries(skuTotals)
-    .sort(([, a], [, b]) => b.cost - a.cost)
+    .sort(([, a], [, b]) =>
+      breakdown === "cost" ? b.cost - a.cost : b.quantity - a.quantity,
+    )
     .slice(0, 6)
     .map(([sku]) => sku);
 
@@ -510,6 +514,12 @@ function ActionsMinutesDetailedChart({
     return `${value.toLocaleString()} min`;
   };
 
+  const isCost = breakdown === "cost";
+  const valueFormatter = isCost ? formatCurrency : formatQuantity;
+  const breakdownLabel = isCost ? "Cost" : "Minutes";
+  const pieDataKey = isCost ? "cost" : "quantity";
+  const repoStackKeySuffix = isCost ? "" : "_quantity";
+
   const reposToShow =
     topRepos.length > 0
       ? [...topRepos, ...(otherRepos.length > 0 ? ["Others"] : [])]
@@ -542,10 +552,10 @@ function ActionsMinutesDetailedChart({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Daily Cost Trend - Stacked by Repository */}
+        {/* Daily Trend - Stacked by Repository */}
         <div className="lg:col-span-2 bg-gray-800/30 rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-4">
-            Daily Cost by Repository
+            Daily {breakdownLabel} by Repository
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={stackedChartData}>
@@ -554,7 +564,7 @@ function ActionsMinutesDetailedChart({
               <YAxis
                 stroke="#9ca3af"
                 fontSize={12}
-                tickFormatter={formatCurrency}
+                tickFormatter={valueFormatter}
               />
               <Tooltip
                 contentStyle={{
@@ -562,14 +572,18 @@ function ActionsMinutesDetailedChart({
                   border: "1px solid #374151",
                   borderRadius: "8px",
                 }}
-                formatter={(value: number) => [formatCurrency(value), "Cost"]}
+                formatter={(value: number) => [
+                  valueFormatter(value),
+                  breakdownLabel,
+                ]}
                 labelStyle={{ color: "#d1d5db" }}
               />
               {reposToShow.map((repo, index) => (
                 <Area
                   key={repo}
                   type="monotone"
-                  dataKey={repo}
+                  dataKey={`${repo}${repoStackKeySuffix}`}
+                  name={repo}
                   stackId="1"
                   stroke={COLORS[index % COLORS.length]}
                   fill={COLORS[index % COLORS.length]}
@@ -582,7 +596,9 @@ function ActionsMinutesDetailedChart({
 
         {/* SKU Breakdown */}
         <div className="bg-gray-800/30 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Cost by SKU</h3>
+          <h3 className="text-lg font-semibold mb-4">
+            {breakdownLabel} by SKU
+          </h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -592,7 +608,7 @@ function ActionsMinutesDetailedChart({
                 innerRadius={40}
                 outerRadius={80}
                 paddingAngle={2}
-                dataKey="cost"
+                dataKey={pieDataKey}
               >
                 {skuBreakdown.map((entry, index) => (
                   <Cell
@@ -607,7 +623,10 @@ function ActionsMinutesDetailedChart({
                   border: "1px solid #374151",
                   borderRadius: "8px",
                 }}
-                formatter={(value: number) => [formatCurrency(value), "Cost"]}
+                formatter={(value: number) => [
+                  valueFormatter(value),
+                  breakdownLabel,
+                ]}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -625,7 +644,7 @@ function ActionsMinutesDetailedChart({
                   {entry.name}
                 </span>
                 <span className="text-white font-medium">
-                  {formatCurrency(entry.cost)}
+                  {valueFormatter(isCost ? entry.cost : entry.quantity)}
                 </span>
               </div>
             ))}
@@ -636,7 +655,9 @@ function ActionsMinutesDetailedChart({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Repository Breakdown */}
         <div className="bg-gray-800/30 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Cost by Repository</h3>
+          <h3 className="text-lg font-semibold mb-4">
+            {breakdownLabel} by Repository
+          </h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -646,7 +667,7 @@ function ActionsMinutesDetailedChart({
                 innerRadius={60}
                 outerRadius={100}
                 paddingAngle={2}
-                dataKey="cost"
+                dataKey={pieDataKey}
               >
                 {repoBreakdown.map((entry, index) => (
                   <Cell
@@ -661,7 +682,10 @@ function ActionsMinutesDetailedChart({
                   border: "1px solid #374151",
                   borderRadius: "8px",
                 }}
-                formatter={(value: number) => [formatCurrency(value), "Cost"]}
+                formatter={(value: number) => [
+                  valueFormatter(value),
+                  breakdownLabel,
+                ]}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -679,17 +703,17 @@ function ActionsMinutesDetailedChart({
                   {entry.name}
                 </span>
                 <span className="text-white font-medium">
-                  {formatCurrency(entry.cost)}
+                  {valueFormatter(isCost ? entry.cost : entry.quantity)}
                 </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Daily Usage Volume - Stacked by Repository */}
+        {/* Secondary daily view - shows the opposite metric for context */}
         <div className="bg-gray-800/30 rounded-lg p-6">
           <h3 className="text-lg font-semibold mb-4">
-            Daily Minutes by Repository
+            Daily {isCost ? "Minutes" : "Cost"} by Repository
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={stackedChartData}>
@@ -698,7 +722,7 @@ function ActionsMinutesDetailedChart({
               <YAxis
                 stroke="#9ca3af"
                 fontSize={12}
-                tickFormatter={formatQuantity}
+                tickFormatter={isCost ? formatQuantity : formatCurrency}
               />
               <Tooltip
                 contentStyle={{
@@ -707,15 +731,16 @@ function ActionsMinutesDetailedChart({
                   borderRadius: "8px",
                 }}
                 formatter={(value: number) => [
-                  formatQuantity(value),
-                  "Minutes",
+                  isCost ? formatQuantity(value) : formatCurrency(value),
+                  isCost ? "Minutes" : "Cost",
                 ]}
                 labelStyle={{ color: "#d1d5db" }}
               />
               {reposToShow.map((repo, index) => (
                 <Bar
                   key={repo}
-                  dataKey={`${repo}_quantity`}
+                  dataKey={isCost ? `${repo}_quantity` : repo}
+                  name={repo}
                   stackId="1"
                   fill={COLORS[index % COLORS.length]}
                   radius={
