@@ -14,6 +14,8 @@ export interface ServiceData {
   organization?: string;
   repository?: string;
   costCenter?: string;
+  username?: string;
+  workflowPath?: string;
 }
 
 export interface CategorizedBillingData {

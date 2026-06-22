@@ -6,6 +6,26 @@ import {
   ServiceData,
 } from "@/types/billing";
 
+/**
+ * Normalize a date string to ISO format (YYYY-MM-DD) so downstream
+ * sorting and month-key extraction (substring(0,7)) work uniformly.
+ * Accepts already-ISO dates and US-style M/D/YY or M/D/YYYY.
+ */
+function normalizeDate(raw: string): string {
+  if (!raw) return raw;
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+  const m = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    const month = m[1].padStart(2, "0");
+    const day = m[2].padStart(2, "0");
+    let year = m[3];
+    if (year.length === 2) year = `20${year}`;
+    return `${year}-${month}-${day}`;
+  }
+  return trimmed;
+}
+
 export function parseCSV(csvContent: string): {
   data: BillingData[];
   categorizedData: CategorizedBillingData;
@@ -42,6 +62,14 @@ export function parseCSV(csvContent: string): {
       h.toLowerCase().includes("cost_center") ||
       h.toLowerCase().includes("costcenter"),
   );
+  const usernameIndex = header.findIndex((h) => {
+    const k = h.toLowerCase();
+    return k === "username" || k === "user_login" || k === "user";
+  });
+  const workflowPathIndex = header.findIndex((h) => {
+    const k = h.toLowerCase().replace(/[^a-z]/g, "");
+    return k === "workflowpath" || k === "workflow";
+  });
 
   const categorizedData: CategorizedBillingData = {
     actionsMinutes: [],
@@ -58,7 +86,7 @@ export function parseCSV(csvContent: string): {
 
       if (values.length < header.length) return; // Skip incomplete rows
 
-      const date = values[dateIndex];
+      const date = normalizeDate(values[dateIndex]);
       const product = values[productIndex];
       const sku = values[skuIndex];
       const quantity = parseFloat(values[quantityIndex]) || 0;
@@ -66,6 +94,9 @@ export function parseCSV(csvContent: string): {
       const organization = values[organizationIndex] || "";
       const repository = values[repositoryIndex] || "";
       const costCenter = values[costCenterIndex] || "";
+      const username = usernameIndex >= 0 ? values[usernameIndex] || "" : "";
+      const workflowPath =
+        workflowPathIndex >= 0 ? values[workflowPathIndex] || "" : "";
 
       if (!date || !product || !sku) return; // Skip rows with missing essential data
 
@@ -77,6 +108,8 @@ export function parseCSV(csvContent: string): {
         organization,
         repository,
         costCenter,
+        username,
+        workflowPath,
       };
 
       const normalizedSku = sku.toLowerCase();

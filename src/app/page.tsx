@@ -5,6 +5,7 @@ import { Navigation } from "@/components/ui/Navigation";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { BillingChart } from "@/components/charts/BillingChart";
 import { ServiceChart } from "@/components/charts/ServiceChart";
+import { ActionsDetailedBreakdown } from "@/components/charts/ActionsDetailedBreakdown";
 import { Tabs } from "@/components/ui/Tabs";
 import { DataFilters } from "@/components/ui/DataFilters";
 import {
@@ -57,7 +58,7 @@ export default function Home() {
   const handleFiltersChange = useCallback(
     (
       serviceType: keyof CategorizedBillingData,
-      filteredServiceData: ServiceData[]
+      filteredServiceData: ServiceData[],
     ) => {
       setFilteredData((prev) => {
         if (!prev) return null;
@@ -67,7 +68,7 @@ export default function Home() {
         };
       });
     },
-    []
+    [],
   );
 
   const handleBreakdownChange = useCallback(
@@ -77,7 +78,7 @@ export default function Home() {
         [serviceType]: newBreakdown,
       }));
     },
-    []
+    [],
   );
 
   const handleStorageUnitChange = useCallback(
@@ -87,7 +88,7 @@ export default function Home() {
         [serviceType]: newUnit,
       }));
     },
-    []
+    [],
   );
 
   // Memoized breakdown change handlers to prevent re-renders
@@ -95,35 +96,35 @@ export default function Home() {
     (newBreakdown: "cost" | "quantity") => {
       handleBreakdownChange("actionsMinutes", newBreakdown);
     },
-    [handleBreakdownChange]
+    [handleBreakdownChange],
   );
 
   const handleActionsStorageBreakdownChange = useCallback(
     (newBreakdown: "cost" | "quantity") => {
       handleBreakdownChange("actionsStorage", newBreakdown);
     },
-    [handleBreakdownChange]
+    [handleBreakdownChange],
   );
 
   const handlePackagesBreakdownChange = useCallback(
     (newBreakdown: "cost" | "quantity") => {
       handleBreakdownChange("packages", newBreakdown);
     },
-    [handleBreakdownChange]
+    [handleBreakdownChange],
   );
 
   const handleActionsStorageUnitChange = useCallback(
     (newUnit: "gb-hours" | "gb-months") => {
       handleStorageUnitChange("actionsStorage", newUnit);
     },
-    [handleStorageUnitChange]
+    [handleStorageUnitChange],
   );
 
   const handlePackagesUnitChange = useCallback(
     (newUnit: "gb-hours" | "gb-months") => {
       handleStorageUnitChange("packages", newUnit);
     },
-    [handleStorageUnitChange]
+    [handleStorageUnitChange],
   );
 
   // Create tabs based on available data
@@ -167,12 +168,12 @@ export default function Home() {
                 const originalOrgs = new Set(
                   categorizedData.actionsMinutes
                     .map((item) => item.organization)
-                    .filter(Boolean)
+                    .filter(Boolean),
                 );
                 const filteredOrgs = new Set(
                   filteredData.actionsMinutes
                     .map((item) => item.organization)
-                    .filter(Boolean)
+                    .filter(Boolean),
                 );
                 return (
                   originalOrgs.size === filteredOrgs.size &&
@@ -180,6 +181,26 @@ export default function Home() {
                 );
               })()}
             />
+            {(categorizedData.actionsMinutes.some(
+              (d) => d.workflowPath || d.username,
+            ) ||
+              filteredData.actionsMinutes.some(
+                (d) => d.workflowPath || d.username,
+              )) && (
+              <ActionsDetailedBreakdown
+                data={filteredData.actionsMinutes}
+                breakdown={breakdown.actionsMinutes}
+                mode={
+                  new Set(
+                    filteredData.actionsMinutes
+                      .map((d) => d.repository)
+                      .filter(Boolean),
+                  ).size === 1
+                    ? "full"
+                    : "compact"
+                }
+              />
+            )}
           </div>
         ),
       },
