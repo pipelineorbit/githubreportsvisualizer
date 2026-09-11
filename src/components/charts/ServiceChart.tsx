@@ -15,6 +15,7 @@ import {
   Bar,
 } from "recharts";
 import { ServiceData } from "@/types/billing";
+import { CopilotChart } from "@/components/charts/CopilotChart";
 
 interface ServiceChartProps {
   data: ServiceData[];
@@ -91,6 +92,10 @@ export function ServiceChart({
         </div>
       </div>
     );
+  }
+
+  if (serviceType === "copilot") {
+    return <CopilotChart data={data} breakdown={breakdown} />;
   }
 
   // Check if data is filtered to a specific repository
@@ -234,8 +239,6 @@ function RepositorySpecificChart({
         return `${gbMonths.toLocaleString(undefined, { maximumFractionDigits: 2 })} GB·mo`;
       }
       return `${value.toLocaleString()} GB·h`;
-    } else if (serviceType === "copilot") {
-      return `${value.toFixed(2)} users`;
     } else {
       return value.toLocaleString();
     }
@@ -936,8 +939,6 @@ function RepositoryBasedChart({
         return `${gbMonths.toLocaleString(undefined, { maximumFractionDigits: 2 })} GB·mo`;
       }
       return `${value.toLocaleString()} GB·h`;
-    } else if (serviceType === "copilot") {
-      return `${value.toFixed(2)} users`;
     } else {
       return value.toLocaleString();
     }
@@ -1293,8 +1294,6 @@ function SKUBasedChart({
         return `${gbMonths.toLocaleString(undefined, { maximumFractionDigits: 2 })} GB·mo`;
       }
       return `${value.toLocaleString()} GB·h`;
-    } else if (serviceType === "copilot") {
-      return `${value.toFixed(2)} users`;
     } else {
       return value.toLocaleString();
     }

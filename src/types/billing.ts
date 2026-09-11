@@ -10,6 +10,10 @@ export interface ServiceData {
   date: string;
   cost: number;
   quantity: number;
+  unitType?: string;
+  appliedCostPerQuantity?: number;
+  grossAmount?: number;
+  discountAmount?: number;
   sku: string;
   organization?: string;
   repository?: string;

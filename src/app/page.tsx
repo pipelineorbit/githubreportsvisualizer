@@ -38,7 +38,7 @@ export default function Home() {
     actionsMinutes: "quantity",
     actionsStorage: "quantity",
     packages: "quantity",
-    copilot: "quantity",
+    copilot: "cost",
     codespaces: "quantity",
   });
   const [storageUnit, setStorageUnit] = useState<
@@ -109,6 +109,13 @@ export default function Home() {
   const handlePackagesBreakdownChange = useCallback(
     (newBreakdown: "cost" | "quantity") => {
       handleBreakdownChange("packages", newBreakdown);
+    },
+    [handleBreakdownChange],
+  );
+
+  const handleCopilotBreakdownChange = useCallback(
+    (newBreakdown: "cost" | "quantity") => {
+      handleBreakdownChange("copilot", newBreakdown);
     },
     [handleBreakdownChange],
   );
@@ -262,12 +269,15 @@ export default function Home() {
               onFiltersChange={(filtered) =>
                 handleFiltersChange("copilot", filtered)
               }
+              onBreakdownChange={handleCopilotBreakdownChange}
+              initialBreakdown={breakdown.copilot}
               serviceType="copilot"
             />
             <ServiceChart
               data={filteredData.copilot}
               title="GitHub Copilot"
               serviceType="copilot"
+              breakdown={breakdown.copilot}
             />
           </div>
         ),
@@ -388,12 +398,6 @@ export default function Home() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Background decoration */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-green-500/10 rounded-full blur-3xl"></div>
-          <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
         </div>
       </section>
     </div>

@@ -1,4 +1,4 @@
-import {
+import type {
   BillingData,
   GitHubBillingReport,
   FileUploadResult,
@@ -47,6 +47,18 @@ export function parseCSV(csvContent: string): {
   const skuIndex = header.findIndex((h) => h.toLowerCase().includes("sku"));
   const quantityIndex = header.findIndex((h) =>
     h.toLowerCase().includes("quantity"),
+  );
+  const unitTypeIndex = header.findIndex(
+    (h) => h.toLowerCase() === "unit_type",
+  );
+  const appliedCostIndex = header.findIndex(
+    (h) => h.toLowerCase() === "applied_cost_per_quantity",
+  );
+  const grossAmountIndex = header.findIndex(
+    (h) => h.toLowerCase() === "gross_amount",
+  );
+  const discountAmountIndex = header.findIndex(
+    (h) => h.toLowerCase() === "discount_amount",
   );
   const netAmountIndex = header.findIndex((h) =>
     h.toLowerCase().includes("net_amount"),
@@ -98,12 +110,21 @@ export function parseCSV(csvContent: string): {
       const workflowPath =
         workflowPathIndex >= 0 ? values[workflowPathIndex] || "" : "";
 
+      const optionalAmount = (columnIndex: number) => {
+        const amount = parseFloat(values[columnIndex]);
+        return Number.isFinite(amount) ? amount : undefined;
+      };
+
       if (!date || !product || !sku) return; // Skip rows with missing essential data
 
       const serviceData: ServiceData = {
         date,
         cost: netAmount,
         quantity,
+        unitType: values[unitTypeIndex] || undefined,
+        appliedCostPerQuantity: optionalAmount(appliedCostIndex),
+        grossAmount: optionalAmount(grossAmountIndex),
+        discountAmount: optionalAmount(discountAmountIndex),
         sku,
         organization,
         repository,

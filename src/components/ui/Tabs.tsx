@@ -44,7 +44,9 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
       </div>
 
       {/* Tab Content */}
-      <div className="min-h-[400px]">{activeTabContent}</div>
+      <div key={activeTab} className="min-h-[400px]">
+        {activeTabContent}
+      </div>
     </div>
   );
 }

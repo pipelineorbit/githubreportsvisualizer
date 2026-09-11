@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useId } from "react";
 import { ServiceData } from "@/types/billing";
 
 interface DataFiltersProps {
   data: ServiceData[];
   onFiltersChange: (filteredData: ServiceData[]) => void;
   onBreakdownChange?: (breakdown: "cost" | "quantity") => void;
+  initialBreakdown?: "cost" | "quantity";
   onStorageUnitChange?: (unit: "gb-hours" | "gb-months") => void;
   serviceType?:
     | "actionsMinutes"
@@ -30,24 +31,27 @@ export function DataFilters({
   data,
   onFiltersChange,
   onBreakdownChange,
+  initialBreakdown,
   onStorageUnitChange,
   serviceType,
 }: DataFiltersProps) {
+  const filterId = useId();
+  const defaultBreakdown = serviceType === "copilot" ? "cost" : "quantity";
   const [filters, setFilters] = useState<FilterState>({
     dateRange: { start: "", end: "" },
     organization: "",
     costCenter: "",
     repository: "",
-    breakdown: "quantity",
+    breakdown: initialBreakdown ?? defaultBreakdown,
     storageUnit: "gb-hours",
   });
 
   // Get unique values for dropdowns
   const organizations = Array.from(
-    new Set(data.map((item) => item.organization).filter(Boolean))
+    new Set(data.map((item) => item.organization).filter(Boolean)),
   ).sort();
   const costCenters = Array.from(
-    new Set(data.map((item) => item.costCenter).filter(Boolean))
+    new Set(data.map((item) => item.costCenter).filter(Boolean)),
   ).sort();
 
   // Filter repositories based on selected organization
@@ -55,7 +59,7 @@ export function DataFilters({
     if (!filters.organization) {
       // If no organization selected, show ALL repositories
       return Array.from(
-        new Set(data.map((item) => item.repository).filter(Boolean))
+        new Set(data.map((item) => item.repository).filter(Boolean)),
       ).sort();
     }
     // Only show repositories from the selected organization
@@ -64,8 +68,8 @@ export function DataFilters({
         data
           .filter((item) => item.organization === filters.organization)
           .map((item) => item.repository)
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     ).sort();
   }, [data, filters.organization]);
 
@@ -149,7 +153,7 @@ export function DataFilters({
 
   const handleFilterChange = (
     key: string,
-    value: string | { start: string; end: string }
+    value: string | { start: string; end: string },
   ) => {
     setFilters((prev) => {
       // Reset repository when organization changes
@@ -173,7 +177,7 @@ export function DataFilters({
       organization: "",
       costCenter: "",
       repository: "",
-      breakdown: "quantity",
+      breakdown: defaultBreakdown,
       storageUnit: "gb-hours",
     });
   };
@@ -189,7 +193,8 @@ export function DataFilters({
   const showBreakdownSelector =
     serviceType === "actionsMinutes" ||
     serviceType === "actionsStorage" ||
-    serviceType === "packages";
+    serviceType === "packages" ||
+    serviceType === "copilot";
 
   // Show storage unit selector for storage-related services
   const showStorageUnitSelector =
@@ -200,8 +205,8 @@ export function DataFilters({
     showBreakdownSelector && showStorageUnitSelector
       ? "lg:grid-cols-6"
       : showBreakdownSelector
-      ? "lg:grid-cols-5"
-      : "lg:grid-cols-4";
+        ? "lg:grid-cols-5"
+        : "lg:grid-cols-4";
 
   return (
     <div className="bg-gray-800/30 rounded-lg p-6 mb-6">
@@ -220,10 +225,11 @@ export function DataFilters({
       <div className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4`}>
         {/* Date Range */}
         <div className="space-y-2">
-          <label className="text-sm text-gray-400">Date Range</label>
+          <p className="text-sm text-gray-400">Date Range</p>
           <div className="space-y-2">
             <input
               type="date"
+              aria-label="Start date"
               value={filters.dateRange.start}
               min={minDate}
               max={maxDate}
@@ -237,6 +243,7 @@ export function DataFilters({
             />
             <input
               type="date"
+              aria-label="End date"
               value={filters.dateRange.end}
               min={minDate}
               max={maxDate}
@@ -253,8 +260,14 @@ export function DataFilters({
 
         {/* Organization */}
         <div className="space-y-2">
-          <label className="text-sm text-gray-400">Organization</label>
+          <label
+            htmlFor={`${filterId}-organization`}
+            className="text-sm text-gray-400"
+          >
+            Organization
+          </label>
           <select
+            id={`${filterId}-organization`}
             value={filters.organization}
             onChange={(e) => handleFilterChange("organization", e.target.value)}
             className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -270,8 +283,14 @@ export function DataFilters({
 
         {/* Cost Center */}
         <div className="space-y-2">
-          <label className="text-sm text-gray-400">Cost Center</label>
+          <label
+            htmlFor={`${filterId}-cost-center`}
+            className="text-sm text-gray-400"
+          >
+            Cost Center
+          </label>
           <select
+            id={`${filterId}-cost-center`}
             value={filters.costCenter}
             onChange={(e) => handleFilterChange("costCenter", e.target.value)}
             className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -287,8 +306,14 @@ export function DataFilters({
 
         {/* Repository */}
         <div className="space-y-2">
-          <label className="text-sm text-gray-400">Repository</label>
+          <label
+            htmlFor={`${filterId}-repository`}
+            className="text-sm text-gray-400"
+          >
+            Repository
+          </label>
           <select
+            id={`${filterId}-repository`}
             value={filters.repository}
             onChange={(e) => handleFilterChange("repository", e.target.value)}
             className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -309,13 +334,19 @@ export function DataFilters({
         {/* Breakdown Selector */}
         {showBreakdownSelector && (
           <div className="space-y-2">
-            <label className="text-sm text-gray-400">Breakdown By</label>
+            <label
+              htmlFor={`${filterId}-breakdown`}
+              className="text-sm text-gray-400"
+            >
+              Breakdown By
+            </label>
             <select
+              id={`${filterId}-breakdown`}
               value={filters.breakdown}
               onChange={(e) =>
                 handleFilterChange(
                   "breakdown",
-                  e.target.value as "cost" | "quantity"
+                  e.target.value as "cost" | "quantity",
                 )
               }
               className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -329,13 +360,19 @@ export function DataFilters({
         {/* Storage Unit Selector */}
         {showStorageUnitSelector && (
           <div className="space-y-2">
-            <label className="text-sm text-gray-400">Storage Unit</label>
+            <label
+              htmlFor={`${filterId}-storage-unit`}
+              className="text-sm text-gray-400"
+            >
+              Storage Unit
+            </label>
             <select
+              id={`${filterId}-storage-unit`}
               value={filters.storageUnit}
               onChange={(e) =>
                 handleFilterChange(
                   "storageUnit",
-                  e.target.value as "gb-hours" | "gb-months"
+                  e.target.value as "gb-hours" | "gb-months",
                 )
               }
               className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
