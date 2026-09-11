@@ -1,7 +1,22 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { parseCSV } = require("./src/lib/fileParser.ts");
+const {
+  parseCSV,
+  serializeRows,
+  serializeSummary,
+  serializeIssues,
+} = require("./src/lib/fileParser.ts");
+const Papa = require("papaparse");
 const { summarizeCopilotBilling } = require("./src/lib/copilotBilling.ts");
+const {
+  summarizeBilling,
+  groupBilling,
+  rankWithOther,
+  rankedDailyData,
+  getBillingTimeline,
+  summarizeCopilotDetails,
+} = require("./src/lib/billingAnalytics.ts");
+const { formatChartDate, spansMultipleYears } = require("./src/lib/utils.ts");
 
 const header =
   '"date","product","sku","quantity","unit_type","applied_cost_per_quantity","gross_amount","discount_amount","net_amount","organization","repository","cost_center_name"';
@@ -220,4 +235,284 @@ test("recomputes totals and organization costs from the filtered rows only", () 
     summary.dailyCosts.map((day) => day.date),
     ["2026-09-02"],
   );
+});
+
+test("imports quoted commas, escaped quotes, and embedded newlines", () => {
+  const result = parseCSV(
+    'date,product,sku,quantity,net_amount,cost_center_name\r\n2026-09-01,copilot,copilot_ai_credit,100,1,"Engineering, ""Shared""\nPlatform"\r\n',
+  );
+
+  assert.equal(
+    result.categorizedData.copilot[0].costCenter,
+    'Engineering, "Shared"\nPlatform',
+  );
+  assert.equal(result.diagnostics.totalRows, 1);
+  assert.equal(result.diagnostics.acceptedRows, 1);
+});
+
+test("retains custom-image storage and unmatched products and SKUs", () => {
+  const result = parseCSV(
+    [
+      "date,product,sku,quantity,unit_type,net_amount",
+      "2026-09-01,actions,actions_custom_image_storage,1800,gigabyte-hours,0.17",
+      "2026-09-01,actions,actions_cache_storage,10,gigabyte-hours,0.02",
+      "2026-09-01,actions,actions_future_meter,4,widgets,1",
+      "2026-09-01,new_product,new_sku,1,items,2",
+    ].join("\n"),
+  );
+
+  assert.equal(result.categorizedData.actionsStorage.length, 2);
+  assert.equal(result.categorizedData.other.length, 2);
+  assert.equal(result.records.length, 4);
+  assert.equal(result.diagnostics.otherRows, 2);
+  assert.equal(result.diagnostics.rejectedRows.length, 0);
+  assert.ok(Math.abs(result.diagnostics.acceptedTotals.cost - 3.19) < 1e-9);
+  assert.ok(Math.abs(result.diagnostics.sourceTotals.cost - 3.19) < 1e-9);
+});
+
+test("rejects invalid numbers and impossible dates without losing their known charges", () => {
+  const result = parseCSV(
+    [
+      "date,product,sku,quantity,net_amount",
+      "2026-09-01,copilot,copilot_ai_credit,100,1",
+      "2026-09-02,copilot,copilot_ai_credit,2minutes,3",
+      "2026-02-30,copilot,copilot_ai_credit,100,4",
+    ].join("\n"),
+  );
+
+  assert.equal(result.records.length, 1);
+  assert.equal(result.diagnostics.totalRows, 3);
+  assert.equal(result.diagnostics.acceptedRows, 1);
+  assert.equal(result.diagnostics.rejectedRows.length, 2);
+  assert.match(result.diagnostics.rejectedRows[0].reason, /quantity/i);
+  assert.match(result.diagnostics.rejectedRows[1].reason, /date/i);
+  assert.equal(result.diagnostics.sourceTotals.cost, 8);
+  assert.equal(result.diagnostics.acceptedTotals.cost, 1);
+  assert.equal(result.diagnostics.rejectedTotals.cost, 7);
+});
+
+test("validates required headers and does not confuse quantity with unit price", () => {
+  assert.throws(
+    () =>
+      parseCSV(
+        "date,product,sku,quantity\n2026-09-01,copilot,copilot_ai_credit,100",
+      ),
+    /net_amount/i,
+  );
+  const result = parseCSV(
+    "date,product,sku,applied_cost_per_quantity,quantity,net_amount\n2026-09-01,copilot,copilot_ai_credit,0.01,100,1",
+  );
+
+  assert.equal(result.categorizedData.copilot[0].quantity, 100);
+  assert.equal(result.categorizedData.copilot[0].appliedCostPerQuantity, 0.01);
+});
+
+test("separates Codespaces and Packages units while combining money", () => {
+  const rows = [
+    {
+      date: "2026-09-01",
+      sku: "codespaces_compute",
+      unitType: "core-hours",
+      quantity: 2,
+      cost: 1,
+    },
+    {
+      date: "2026-09-01",
+      sku: "codespaces_storage",
+      unitType: "gigabyte-hours",
+      quantity: 100,
+      cost: 2,
+    },
+  ];
+  const summary = summarizeBilling(rows);
+  assert.equal(summary.cost, 3);
+  assert.equal(summary.quantity, undefined);
+  assert.deepEqual(
+    summary.usageGroups.map((group) => group.quantity),
+    [2, 100],
+  );
+  const [organization] = groupBilling(rows, "organization");
+  assert.equal(organization.quantity, undefined);
+  assert.equal(organization.mixedUnits, true);
+  assert.throws(
+    () => rankWithOther(groupBilling(rows, "sku"), "quantity"),
+    /single usage unit/,
+  );
+});
+
+test("ranks by the active metric and reconciles the complete Other remainder", () => {
+  const rows = Array.from({ length: 9 }, (_, index) => ({
+    date: "2026-09-01",
+    sku: `actions_linux_${index}`,
+    unitType: "minutes",
+    cost: index + 1,
+    quantity: 100 - index,
+  }));
+  const groups = groupBilling(rows, "sku");
+  const originalOrder = groups.map((group) => group.key);
+  const byCost = rankWithOther(groups, "cost");
+  const byQuantity = rankWithOther(groups, "quantity");
+  assert.equal(byCost.length, 7);
+  assert.equal(byCost[0].label, "actions_linux_8");
+  assert.equal(byQuantity[0].label, "actions_linux_0");
+  assert.equal(byCost[6].label, "Other (3)");
+  assert.equal(
+    byCost.reduce((total, group) => total + group.cost, 0),
+    45,
+  );
+  assert.equal(
+    byQuantity.reduce((total, group) => total + group.quantity, 0),
+    rows.reduce((total, row) => total + row.quantity, 0),
+  );
+  assert.deepEqual(
+    groups.map((group) => group.key),
+    originalOrder,
+  );
+  const trend = rankedDailyData(byCost, "cost");
+  assert.equal(
+    trend.series.reduce(
+      (total, series) => total + trend.points[0][series.key],
+      0,
+    ),
+    45,
+  );
+});
+
+test("preserves refunds in cumulative spend and does not invent daily changes across gaps", () => {
+  const timeline = getBillingTimeline([
+    { date: "2026-09-03", sku: "example", quantity: 1, cost: 7 },
+    { date: "2026-09-01", sku: "example", quantity: 1, cost: 10 },
+    { date: "2026-09-04", sku: "example", quantity: -1, cost: -2 },
+  ]);
+  assert.deepEqual(
+    timeline.daily.map((day) => day.cumulative),
+    [10, 17, 15],
+  );
+  assert.deepEqual(
+    timeline.daily.map((day) => day.change),
+    [undefined, undefined, -9],
+  );
+  assert.equal(timeline.missingDays, 1);
+  assert.equal(timeline.monthlyEstimate, undefined);
+  assert.equal(timeline.partialPeriod, true);
+});
+
+test("labels partial calendar periods and bounds monthly estimates to one contiguous month", () => {
+  const rows = [
+    { date: "2026-09-01", sku: "example", quantity: 1, cost: 1 },
+    { date: "2026-09-02", sku: "example", quantity: 1, cost: 3 },
+  ];
+  const timeline = getBillingTimeline(rows);
+  assert.equal(timeline.partialPeriod, true);
+  assert.equal(timeline.monthlyEstimate, 60);
+  assert.equal(timeline.averageReportedDay, 2);
+  assert.equal(
+    getBillingTimeline([...rows, { ...rows[0], date: "2026-10-01" }])
+      .monthlyEstimate,
+    undefined,
+  );
+});
+
+test("formats chart dates in UTC regardless of the viewer time zone", () => {
+  const previous = process.env.TZ;
+  try {
+    for (const zone of ["America/Los_Angeles", "Asia/Tokyo", "UTC"]) {
+      process.env.TZ = zone;
+      assert.equal(formatChartDate("2026-09-01"), "Sep 1");
+      assert.equal(formatChartDate("2026-01-01", true), "Jan 1, 2026");
+      assert.equal(spansMultipleYears(["2026-01-01", "2026-12-31"]), false);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});
+
+test("preserves detailed user/model/token fields without double-counting cached tokens", () => {
+  const parsed = parseCSV(
+    "date,product,sku,quantity,unit_type,net_amount,user_login,model_name,input_tokens,output_tokens,cached_input_tokens,total_tokens\n2026-09-01,copilot,copilot_ai_credit,100,ai-credits,1,alice,model-a,10,3,4,13",
+  );
+  const details = summarizeCopilotDetails(parsed.records);
+  assert.equal(details.hasUsers, true);
+  assert.equal(details.hasModels, true);
+  assert.equal(details.byUser[0].label, "alice");
+  assert.equal(details.byModel[0].label, "model-a");
+  assert.equal(details.tokens.totalTokens, 13);
+  assert.equal(details.tokens.cachedTokens, 4);
+  assert.equal(
+    summarizeCopilotDetails([
+      { date: "2026-09-01", sku: "copilot_ai_credit", quantity: 10, cost: 0.1 },
+    ]).tokenRows,
+    0,
+  );
+});
+
+test("exports filtered rows with quoted metadata and numeric refunds intact", () => {
+  const parsed = parseCSV(
+    'date,product,sku,quantity,net_amount,cost_center_name,custom_field\n2026-09-01,copilot,copilot_ai_credit,100,1,"Engineering, Shared",kept\n2026-09-02,copilot,copilot_ai_credit,-20,-0.2,"Engineering, Shared",refund',
+  );
+  const exported = serializeRows(parsed.records.filter((row) => row.cost < 0));
+  const roundTrip = parseCSV(exported);
+  assert.equal(roundTrip.records.length, 1);
+  assert.equal(roundTrip.records[0].quantity, -20);
+  assert.equal(roundTrip.records[0].cost, -0.2);
+  assert.equal(roundTrip.records[0].grossAmount, undefined);
+  assert.equal(roundTrip.records[0].costCenter, "Engineering, Shared");
+  assert.equal(roundTrip.records[0].source.custom_field, "refund");
+});
+
+test("protects CSV text from spreadsheet formulas without changing negative numbers", () => {
+  const rows = [
+    {
+      date: "2026-09-01",
+      product: "copilot",
+      sku: "copilot_ai_credit",
+      quantity: -20,
+      cost: -0.2,
+      costCenter: "=1+1",
+    },
+  ];
+  const exported = Papa.parse(serializeRows(rows), { header: true }).data[0];
+  assert.equal(exported.cost_center_name, "'=1+1");
+  assert.equal(exported.net_amount, "-0.2");
+  assert.equal(exported.quantity, "-20");
+});
+
+test("exports complete reconciled summaries and explicit rejected-record reasons", () => {
+  const parsed = parseCSV(
+    "date,product,sku,quantity,unit_type,net_amount\n2026-09-01,codespaces,compute,2,core-hours,1\n2026-09-01,codespaces,storage,10,gigabyte-hours,2\n2026-09-01,codespaces,compute,bad,core-hours,3",
+  );
+  const summary = Papa.parse(
+    serializeSummary(
+      groupBilling(parsed.records, "organization"),
+      "organization",
+    ),
+    { header: true },
+  ).data;
+  assert.equal(summary[0].net_amount, "3");
+  assert.equal(summary[0].quantity, "");
+  assert.equal(summary[0].unit_type, "mixed");
+  const rejected = Papa.parse(
+    serializeIssues(parsed.diagnostics.rejectedRows),
+    { header: true },
+  ).data;
+  assert.equal(rejected[0].net_amount, "3");
+  assert.match(rejected[0].rejection_reason, /quantity/);
+  assert.equal(rejected[0].source_record, "4");
+});
+
+test("reports missing or invalid amounts and duplicate headers explicitly", () => {
+  assert.throws(
+    () =>
+      parseCSV(
+        "date,product,sku,quantity,Quantity,net_amount\n2026-09-01,copilot,example,1,1,1",
+      ),
+    /unique/,
+  );
+  const result = parseCSV(
+    "date,product,sku,quantity,net_amount,gross_amount\n2026-09-01,copilot,example,1,1e309,1\n2026-09-02,copilot,example,1,2,invalid",
+  );
+  assert.equal(result.diagnostics.rejectedRows.length, 2);
+  assert.equal(result.diagnostics.sourceTotals.cost, undefined);
+  assert.equal(result.diagnostics.acceptedTotals.cost, 0);
 });

@@ -17,6 +17,7 @@ import {
   Legend,
 } from "recharts";
 import { ServiceData } from "@/types/billing";
+import { formatChartDate, spansMultipleYears } from "@/lib/utils";
 
 interface ActionsDetailedBreakdownProps {
   data: ServiceData[];
@@ -45,18 +46,8 @@ const COLORS = [
 
 const TOP_N = 10;
 
-function spansMultipleYears(dates: string[]): boolean {
-  if (dates.length === 0) return false;
-  const years = new Set(dates.map((d) => new Date(d).getFullYear()));
-  return years.size > 1;
-}
-
 function formatDateForChart(isoDate: string, includeYear: boolean): string {
-  const d = new Date(isoDate);
-  const options: Intl.DateTimeFormatOptions = includeYear
-    ? { month: "short", day: "numeric", year: "2-digit" }
-    : { month: "short", day: "numeric" };
-  return d.toLocaleDateString("en-US", options);
+  return formatChartDate(isoDate, includeYear);
 }
 
 /**

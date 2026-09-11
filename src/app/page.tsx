@@ -1,405 +1,151 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Navigation } from "@/components/ui/Navigation";
 import { FileUpload } from "@/components/ui/FileUpload";
-import { BillingChart } from "@/components/charts/BillingChart";
 import { ServiceChart } from "@/components/charts/ServiceChart";
 import { ActionsDetailedBreakdown } from "@/components/charts/ActionsDetailedBreakdown";
 import { Tabs } from "@/components/ui/Tabs";
 import { DataFilters } from "@/components/ui/DataFilters";
-import {
+import { FinancialOverview } from "@/components/charts/FinancialOverview";
+import { DataProcessor } from "@/lib/dataProcessor";
+import { SERVICE_LABELS } from "@/lib/billingAnalytics";
+import { Upload } from "lucide-react";
+import type {
   GitHubBillingReport,
-  BillingData,
-  CategorizedBillingData,
   ServiceData,
+  ServiceType,
 } from "@/types/billing";
 
-const sampleBillingData: BillingData[] = [
-  { month: "Jan", actions: 120, packages: 80, storage: 40 },
-  { month: "Feb", actions: 150, packages: 90, storage: 45 },
-  { month: "Mar", actions: 180, packages: 110, storage: 50 },
-  { month: "Apr", actions: 220, packages: 130, storage: 55 },
-  { month: "May", actions: 190, packages: 120, storage: 48 },
-  { month: "Jun", actions: 250, packages: 140, storage: 60 },
-];
-
 export default function Home() {
-  const [billingData, setBillingData] =
-    useState<BillingData[]>(sampleBillingData);
-  const [categorizedData, setCategorizedData] =
-    useState<CategorizedBillingData | null>(null);
-  const [filteredData, setFilteredData] =
-    useState<CategorizedBillingData | null>(null);
-  const [hasUploadedData, setHasUploadedData] = useState(false);
-  const [breakdown, setBreakdown] = useState<
-    Record<string, "cost" | "quantity">
-  >({
-    actionsMinutes: "quantity",
-    actionsStorage: "quantity",
-    packages: "quantity",
-    copilot: "cost",
-    codespaces: "quantity",
-  });
-  const [storageUnit, setStorageUnit] = useState<
-    Record<string, "gb-hours" | "gb-months">
-  >({
-    actionsStorage: "gb-hours",
-    packages: "gb-hours",
-  });
+  const [report, setReport] = useState<GitHubBillingReport | null>(null);
+  const [filteredRows, setFilteredRows] = useState<ServiceData[]>([]);
+  const [breakdown, setBreakdown] = useState<"cost" | "quantity">("cost");
+  const [storageUnit, setStorageUnit] = useState<"gb-hours" | "gb-months">(
+    "gb-hours",
+  );
+  const [uploadVersion, setUploadVersion] = useState(0);
 
-  const handleDataLoaded = (report: GitHubBillingReport) => {
-    setBillingData(report.data);
-    setCategorizedData(report.categorizedData || null);
-    setFilteredData(report.categorizedData || null);
-    setHasUploadedData(true);
+  const handleDataLoaded = (loaded: GitHubBillingReport) => {
+    const records =
+      loaded.records ?? Object.values(loaded.categorizedData ?? {}).flat();
+    setReport({ ...loaded, records });
+    setFilteredRows(records);
+    setBreakdown("cost");
+    setStorageUnit("gb-hours");
+    setUploadVersion((version) => version + 1);
   };
 
-  const handleFiltersChange = useCallback(
-    (
-      serviceType: keyof CategorizedBillingData,
-      filteredServiceData: ServiceData[],
-    ) => {
-      setFilteredData((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          [serviceType]: filteredServiceData,
-        };
-      });
-    },
-    [],
-  );
-
-  const handleBreakdownChange = useCallback(
-    (serviceType: string, newBreakdown: "cost" | "quantity") => {
-      setBreakdown((prev) => ({
-        ...prev,
-        [serviceType]: newBreakdown,
-      }));
-    },
-    [],
-  );
-
-  const handleStorageUnitChange = useCallback(
-    (serviceType: string, newUnit: "gb-hours" | "gb-months") => {
-      setStorageUnit((prev) => ({
-        ...prev,
-        [serviceType]: newUnit,
-      }));
-    },
-    [],
-  );
-
-  // Memoized breakdown change handlers to prevent re-renders
-  const handleActionsMinutesBreakdownChange = useCallback(
-    (newBreakdown: "cost" | "quantity") => {
-      handleBreakdownChange("actionsMinutes", newBreakdown);
-    },
-    [handleBreakdownChange],
-  );
-
-  const handleActionsStorageBreakdownChange = useCallback(
-    (newBreakdown: "cost" | "quantity") => {
-      handleBreakdownChange("actionsStorage", newBreakdown);
-    },
-    [handleBreakdownChange],
-  );
-
-  const handlePackagesBreakdownChange = useCallback(
-    (newBreakdown: "cost" | "quantity") => {
-      handleBreakdownChange("packages", newBreakdown);
-    },
-    [handleBreakdownChange],
-  );
-
-  const handleCopilotBreakdownChange = useCallback(
-    (newBreakdown: "cost" | "quantity") => {
-      handleBreakdownChange("copilot", newBreakdown);
-    },
-    [handleBreakdownChange],
-  );
-
-  const handleActionsStorageUnitChange = useCallback(
-    (newUnit: "gb-hours" | "gb-months") => {
-      handleStorageUnitChange("actionsStorage", newUnit);
-    },
-    [handleStorageUnitChange],
-  );
-
-  const handlePackagesUnitChange = useCallback(
-    (newUnit: "gb-hours" | "gb-months") => {
-      handleStorageUnitChange("packages", newUnit);
-    },
-    [handleStorageUnitChange],
-  );
-
-  // Create tabs based on available data
-  const createTabs = () => {
-    if (!categorizedData || !filteredData) {
-      return [
+  const categories = DataProcessor.categorizeServiceData(filteredRows);
+  const tabs = report
+    ? [
         {
           id: "overview",
-          label: "Sample Overview",
+          label: "Overview",
           content: (
-            <BillingChart
-              data={billingData}
-              title="Sample GitHub Billing Visualization"
+            <FinancialOverview
+              data={filteredRows}
+              diagnostics={report.diagnostics}
             />
           ),
         },
-      ];
-    }
-
-    return [
-      {
-        id: "actionsMinutes",
-        label: "Actions Minutes",
-        content: (
-          <div>
-            <DataFilters
-              data={categorizedData.actionsMinutes}
-              onFiltersChange={(filtered) =>
-                handleFiltersChange("actionsMinutes", filtered)
-              }
-              onBreakdownChange={handleActionsMinutesBreakdownChange}
-              serviceType="actionsMinutes"
-            />
-            <ServiceChart
-              data={filteredData.actionsMinutes}
-              title="GitHub Actions Minutes"
-              serviceType="actionsMinutes"
-              breakdown={breakdown.actionsMinutes}
-              useSkuAnalysis={(() => {
-                // Use SKU analysis when all organizations are shown (no organization filter applied)
-                const originalOrgs = new Set(
-                  categorizedData.actionsMinutes
-                    .map((item) => item.organization)
-                    .filter(Boolean),
-                );
-                const filteredOrgs = new Set(
-                  filteredData.actionsMinutes
-                    .map((item) => item.organization)
-                    .filter(Boolean),
-                );
-                return (
-                  originalOrgs.size === filteredOrgs.size &&
-                  originalOrgs.size > 1
-                );
-              })()}
-            />
-            {(categorizedData.actionsMinutes.some(
-              (d) => d.workflowPath || d.username,
-            ) ||
-              filteredData.actionsMinutes.some(
-                (d) => d.workflowPath || d.username,
-              )) && (
-              <ActionsDetailedBreakdown
-                data={filteredData.actionsMinutes}
-                breakdown={breakdown.actionsMinutes}
-                mode={
-                  new Set(
-                    filteredData.actionsMinutes
-                      .map((d) => d.repository)
-                      .filter(Boolean),
-                  ).size === 1
-                    ? "full"
-                    : "compact"
-                }
-              />
-            )}
-          </div>
-        ),
-      },
-      {
-        id: "actionsStorage",
-        label: "Actions Storage",
-        content: (
-          <div>
-            <DataFilters
-              data={categorizedData.actionsStorage}
-              onFiltersChange={(filtered) =>
-                handleFiltersChange("actionsStorage", filtered)
-              }
-              onBreakdownChange={handleActionsStorageBreakdownChange}
-              onStorageUnitChange={handleActionsStorageUnitChange}
-              serviceType="actionsStorage"
-            />
-            <ServiceChart
-              data={filteredData.actionsStorage}
-              title="GitHub Actions Storage"
-              serviceType="actionsStorage"
-              breakdown={breakdown.actionsStorage}
-              storageUnit={storageUnit.actionsStorage}
-            />
-          </div>
-        ),
-      },
-      {
-        id: "packages",
-        label: "Packages",
-        content: (
-          <div>
-            <DataFilters
-              data={categorizedData.packages}
-              onFiltersChange={(filtered) =>
-                handleFiltersChange("packages", filtered)
-              }
-              onBreakdownChange={handlePackagesBreakdownChange}
-              onStorageUnitChange={handlePackagesUnitChange}
-              serviceType="packages"
-            />
-            <ServiceChart
-              data={filteredData.packages}
-              title="GitHub Packages"
-              serviceType="packages"
-              breakdown={breakdown.packages}
-              storageUnit={storageUnit.packages}
-            />
-          </div>
-        ),
-      },
-      {
-        id: "copilot",
-        label: "Copilot",
-        content: (
-          <div>
-            <DataFilters
-              data={categorizedData.copilot}
-              onFiltersChange={(filtered) =>
-                handleFiltersChange("copilot", filtered)
-              }
-              onBreakdownChange={handleCopilotBreakdownChange}
-              initialBreakdown={breakdown.copilot}
-              serviceType="copilot"
-            />
-            <ServiceChart
-              data={filteredData.copilot}
-              title="GitHub Copilot"
-              serviceType="copilot"
-              breakdown={breakdown.copilot}
-            />
-          </div>
-        ),
-      },
-      {
-        id: "codespaces",
-        label: "Codespaces",
-        content: (
-          <div>
-            <DataFilters
-              data={categorizedData.codespaces}
-              onFiltersChange={(filtered) =>
-                handleFiltersChange("codespaces", filtered)
-              }
-              serviceType="codespaces"
-            />
-            <ServiceChart
-              data={filteredData.codespaces}
-              title="GitHub Codespaces"
-              serviceType="codespaces"
-            />
-          </div>
-        ),
-      },
-    ].filter((tab) => {
-      // Only show tabs with data
-      switch (tab.id) {
-        case "actionsMinutes":
-          return categorizedData.actionsMinutes.length > 0;
-        case "actionsStorage":
-          return categorizedData.actionsStorage.length > 0;
-        case "packages":
-          return categorizedData.packages.length > 0;
-        case "copilot":
-          return categorizedData.copilot.length > 0;
-        case "codespaces":
-          return categorizedData.codespaces.length > 0;
-        default:
-          return true;
-      }
-    });
-  };
-
-  const tabs = createTabs();
+        ...(Object.keys(SERVICE_LABELS) as ServiceType[])
+          .filter((service) => categories[service].length > 0)
+          .map((service) => ({
+            id: service,
+            label: SERVICE_LABELS[service],
+            content: (
+              <div className="min-w-0 space-y-8">
+                <h2 className="text-xl font-semibold">
+                  {SERVICE_LABELS[service]}
+                </h2>
+                <ServiceChart
+                  data={categories[service]}
+                  title={SERVICE_LABELS[service]}
+                  serviceType={service}
+                  breakdown={breakdown}
+                  storageUnit={storageUnit}
+                />
+                {service === "actionsMinutes" &&
+                  categories[service].some(
+                    (item) => item.workflowPath || item.username,
+                  ) && (
+                    <ActionsDetailedBreakdown
+                      data={categories[service]}
+                      breakdown={breakdown}
+                      mode={
+                        new Set(
+                          categories[service]
+                            .map((item) => item.repository)
+                            .filter(Boolean),
+                        ).size === 1
+                          ? "full"
+                          : "compact"
+                      }
+                    />
+                  )}
+              </div>
+            ),
+          })),
+      ]
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      <a
+        href="#billing-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-gray-900 focus:p-3 focus:text-sky-300"
+      >
+        Skip to billing content
+      </a>
       <Navigation />
-
-      {/* Main Content */}
-      <section className="relative py-32 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          {!hasUploadedData ? (
-            /* Landing Content - Only shown when no data is uploaded */
-            <div className="text-center">
-              <h1 className="text-5xl md:text-7xl font-bold mb-8 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-                Understand Your
-                <br />
-                <span className="bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent">
-                  GitHub Costs
-                </span>
-              </h1>
-
-              <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-                Upload your GitHub billing report to visualize spending patterns
-                and optimize costs across all services.
-                <br />
-                <span className="text-sm text-gray-500 mt-2 block">
-                  Your data is processed locally and not stored on our servers.
-                </span>
-              </p>
-
-              {/* File Upload */}
-              <div className="mb-16">
-                <FileUpload onDataLoaded={handleDataLoaded} />
+      <main
+        id="billing-content"
+        className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8"
+      >
+        {!report ? (
+          <section className="mx-auto max-w-3xl py-8 sm:py-12">
+            <h1 className="mb-8 text-3xl font-semibold">
+              GitHub Billing Reports
+            </h1>
+            <FileUpload onDataLoaded={handleDataLoaded} />
+          </section>
+        ) : (
+          <>
+            <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-semibold">
+                  GitHub Billing Reports
+                </h1>
+                <p className="mt-1 break-all text-sm text-gray-400">
+                  {report.fileName}
+                </p>
               </div>
-            </div>
-          ) : (
-            /* Analysis Content - Shown after upload */
-            <div>
-              {/* Back Button */}
-              <div className="mb-8">
-                <button
-                  onClick={() => {
-                    setHasUploadedData(false);
-                    setCategorizedData(null);
-                    setFilteredData(null);
-                    setBillingData(sampleBillingData);
-                  }}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-300 bg-gray-800/50 border border-gray-600 rounded-lg hover:bg-gray-700/50 hover:border-gray-500 transition-colors"
-                >
-                  <svg
-                    className="w-4 h-4 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    />
-                  </svg>
-                  Upload New File
-                </button>
-              </div>
-
-              {/* Full Width Visualization */}
-              <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-8">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">Service Breakdown</h2>
-                  <p className="text-gray-400">
-                    Detailed cost and usage analysis by GitHub service
-                  </p>
-                </div>
-                <Tabs tabs={tabs} defaultTab="actionsMinutes" />
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
+              <button
+                type="button"
+                onClick={() => {
+                  setReport(null);
+                  setFilteredRows([]);
+                }}
+                className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded border border-gray-600 px-3 py-2 text-sm text-gray-200 hover:border-sky-400 hover:text-white focus-visible:outline-2 focus-visible:outline-sky-400"
+              >
+                <Upload size={16} aria-hidden="true" />
+                Upload New File
+              </button>
+            </header>
+            <DataFilters
+              key={uploadVersion}
+              data={report.records ?? []}
+              onFiltersChange={setFilteredRows}
+              onBreakdownChange={setBreakdown}
+              onStorageUnitChange={setStorageUnit}
+              initialBreakdown="cost"
+              serviceType="overview"
+            />
+            <Tabs key={uploadVersion} tabs={tabs} defaultTab="overview" />
+          </>
+        )}
+      </main>
     </div>
   );
 }

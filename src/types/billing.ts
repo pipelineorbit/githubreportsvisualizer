@@ -3,6 +3,9 @@ export interface BillingData {
   actions: number;
   packages: number;
   storage: number;
+  copilot?: number;
+  codespaces?: number;
+  other?: number;
   total?: number;
 }
 
@@ -15,11 +18,19 @@ export interface ServiceData {
   grossAmount?: number;
   discountAmount?: number;
   sku: string;
+  product?: string;
+  sourceRow?: number;
+  source?: Record<string, string>;
   organization?: string;
   repository?: string;
   costCenter?: string;
   username?: string;
   workflowPath?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  totalTokens?: number;
 }
 
 export interface CategorizedBillingData {
@@ -28,6 +39,32 @@ export interface CategorizedBillingData {
   packages: ServiceData[];
   copilot: ServiceData[];
   codespaces: ServiceData[];
+  other: ServiceData[];
+}
+
+export type ServiceType = keyof CategorizedBillingData;
+
+export interface FinancialTotals {
+  cost: number | undefined;
+  grossAmount: number | undefined;
+  discountAmount: number | undefined;
+}
+
+export interface ImportIssue {
+  record: number;
+  reason: string;
+  values: Record<string, string>;
+}
+
+export interface ImportDiagnostics {
+  totalRows: number;
+  acceptedRows: number;
+  otherRows: number;
+  rejectedRows: ImportIssue[];
+  warnings: ImportIssue[];
+  sourceTotals: FinancialTotals;
+  acceptedTotals: FinancialTotals;
+  rejectedTotals: FinancialTotals;
 }
 
 export interface GitHubBillingReport {
@@ -38,6 +75,9 @@ export interface GitHubBillingReport {
   };
   data: BillingData[];
   categorizedData?: CategorizedBillingData;
+  records?: ServiceData[];
+  diagnostics?: ImportDiagnostics;
+  fileName?: string;
 }
 
 export interface FileUploadResult {

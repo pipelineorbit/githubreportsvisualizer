@@ -7,6 +7,14 @@ on:
     paths:
       - "Dockerfile"
       - "src/**"
+      - "package*.json"
+      - "next.config.ts"
+      - "tsconfig.json"
+      - "postcss.config.mjs"
+      - "test-*.js"
+      - "public/**"
+      - ".dockerignore"
+      - ".github/workflows/docker-build-push.yml"
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -17,6 +25,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository

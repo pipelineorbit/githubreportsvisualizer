@@ -26,7 +26,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
 
         if (result.success && result.data) {
           setSuccess(
-            `Successfully loaded ${result.data.data.length} months of billing data`
+            `Loaded ${result.data.diagnostics?.acceptedRows ?? 0} accepted billing records`
           );
           onDataLoaded(result.data);
         } else {
@@ -78,7 +78,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     <div className="w-full max-w-2xl mx-auto">
       <div
         className={`
-          relative border-2 border-dashed rounded-xl p-8 text-center transition-colors
+          relative border-2 border-dashed rounded-lg p-6 sm:p-8 text-center transition-colors focus-within:ring-2 focus-within:ring-sky-400
           ${
             isDragOver
               ? "border-green-400 bg-green-400/10"
@@ -92,6 +92,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
       >
         <input
           type="file"
+          aria-label="Upload billing CSV"
           accept=".csv"
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -116,7 +117,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
             )}
           </div>
 
-          <div>
+          <div aria-live="polite">
             <p className="text-lg font-medium text-white mb-2">
               {isProcessing
                 ? "Processing file..."
@@ -133,14 +134,14 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
       </div>
 
       {error && (
-        <div className="mt-4 p-4 bg-red-900/20 border border-red-700 rounded-lg flex items-center space-x-3">
+        <div role="alert" className="mt-4 p-4 bg-red-900/20 border border-red-700 rounded-lg flex items-center space-x-3">
           <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <p className="text-red-300 text-sm">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="mt-4 p-4 bg-green-900/20 border border-green-700 rounded-lg flex items-center space-x-3">
+        <div role="status" className="mt-4 p-4 bg-green-900/20 border border-green-700 rounded-lg flex items-center space-x-3">
           <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
           <p className="text-green-300 text-sm">{success}</p>
         </div>

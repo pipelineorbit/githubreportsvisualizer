@@ -1,4 +1,20 @@
-import { ServiceData } from "@/types/billing";
+import type { CategorizedBillingData, ServiceData, ServiceType } from "@/types/billing";
+
+export function getServiceType(item: ServiceData): ServiceType {
+  const sku = item.sku.toLowerCase();
+  const product = item.product?.toLowerCase() || sku.split("_")[0];
+  const unit = item.unitType?.toLowerCase();
+
+  if (product === "actions") {
+    if (["gigabyte-hours", "gigabyte-months", "gb-hours", "gb-months"].includes(unit ?? "")) return "actionsStorage";
+    if (unit === "minutes") return "actionsMinutes";
+    if (sku.includes("storage")) return "actionsStorage";
+    if (/^actions_(linux|windows|macos|self_hosted)(_|$)/.test(sku)) return "actionsMinutes";
+    return "other";
+  }
+  if (product === "copilot" || product === "packages" || product === "codespaces") return product;
+  return "other";
+}
 
 /**
  * Memory-efficient data aggregation utilities
@@ -170,42 +186,18 @@ export class DataProcessor {
   /**
    * Optimized data categorization
    */
-  static categorizeServiceData(data: ServiceData[]): {
-    actionsMinutes: ServiceData[];
-    actionsStorage: ServiceData[];
-    packages: ServiceData[];
-    copilot: ServiceData[];
-    codespaces: ServiceData[];
-  } {
-    const categories = {
-      actionsMinutes: [] as ServiceData[],
-      actionsStorage: [] as ServiceData[],
-      packages: [] as ServiceData[],
-      copilot: [] as ServiceData[],
-      codespaces: [] as ServiceData[],
+  static categorizeServiceData(data: ServiceData[]): CategorizedBillingData {
+    const categories: CategorizedBillingData = {
+      actionsMinutes: [],
+      actionsStorage: [],
+      packages: [],
+      copilot: [],
+      codespaces: [],
+      other: [],
     };
 
     data.forEach((item) => {
-      const sku = item.sku.toLowerCase();
-
-      // Simple pattern matching for basic categorization
-      if (sku === "actions_storage") {
-        categories.actionsStorage.push(item);
-      } else if (
-        sku.includes("action") ||
-        sku.includes("minute") ||
-        sku.includes("linux") ||
-        sku.includes("windows") ||
-        sku.includes("macos")
-      ) {
-        categories.actionsMinutes.push(item);
-      } else if (sku.includes("package")) {
-        categories.packages.push(item);
-      } else if (sku.includes("copilot")) {
-        categories.copilot.push(item);
-      } else if (sku.includes("codespace")) {
-        categories.codespaces.push(item);
-      }
+      categories[getServiceType(item)].push(item);
     });
 
     return categories;
