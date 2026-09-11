@@ -21,7 +21,10 @@ export type BillingDimension =
   | "model";
 export type BillingMetric = "cost" | "quantity";
 export type TokenField =
-  "inputTokens" | "outputTokens" | "cachedTokens" | "totalTokens";
+  | "inputTokens"
+  | "outputTokens"
+  | "cachedTokens"
+  | "totalTokens";
 export const TOKEN_FIELDS: TokenField[] = [
   "inputTokens",
   "outputTokens",

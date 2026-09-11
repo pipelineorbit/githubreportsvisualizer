@@ -26,7 +26,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
 
         if (result.success && result.data) {
           setSuccess(
-            `Loaded ${result.data.diagnostics?.acceptedRows ?? 0} accepted billing records`
+            `Loaded ${result.data.diagnostics?.acceptedRows ?? 0} accepted billing records`,
           );
           onDataLoaded(result.data);
         } else {
@@ -38,7 +38,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
         setIsProcessing(false);
       }
     },
-    [onDataLoaded]
+    [onDataLoaded],
   );
 
   const handleDrop = useCallback(
@@ -51,7 +51,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
         handleFile(files[0]);
       }
     },
-    [handleFile]
+    [handleFile],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -71,7 +71,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
         handleFile(files[0]);
       }
     },
-    [handleFile]
+    [handleFile],
   );
 
   return (
@@ -134,14 +134,20 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
       </div>
 
       {error && (
-        <div role="alert" className="mt-4 p-4 bg-red-900/20 border border-red-700 rounded-lg flex items-center space-x-3">
+        <div
+          role="alert"
+          className="mt-4 p-4 bg-red-900/20 border border-red-700 rounded-lg flex items-center space-x-3"
+        >
           <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <p className="text-red-300 text-sm">{error}</p>
         </div>
       )}
 
       {success && (
-        <div role="status" className="mt-4 p-4 bg-green-900/20 border border-green-700 rounded-lg flex items-center space-x-3">
+        <div
+          role="status"
+          className="mt-4 p-4 bg-green-900/20 border border-green-700 rounded-lg flex items-center space-x-3"
+        >
           <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
           <p className="text-green-300 text-sm">{success}</p>
         </div>

@@ -1,4 +1,8 @@
-import type { CategorizedBillingData, ServiceData, ServiceType } from "@/types/billing";
+import type {
+  CategorizedBillingData,
+  ServiceData,
+  ServiceType,
+} from "@/types/billing";
 
 export function getServiceType(item: ServiceData): ServiceType {
   const sku = item.sku.toLowerCase();
@@ -6,13 +10,24 @@ export function getServiceType(item: ServiceData): ServiceType {
   const unit = item.unitType?.toLowerCase();
 
   if (product === "actions") {
-    if (["gigabyte-hours", "gigabyte-months", "gb-hours", "gb-months"].includes(unit ?? "")) return "actionsStorage";
+    if (
+      ["gigabyte-hours", "gigabyte-months", "gb-hours", "gb-months"].includes(
+        unit ?? "",
+      )
+    )
+      return "actionsStorage";
     if (unit === "minutes") return "actionsMinutes";
     if (sku.includes("storage")) return "actionsStorage";
-    if (/^actions_(linux|windows|macos|self_hosted)(_|$)/.test(sku)) return "actionsMinutes";
+    if (/^actions_(linux|windows|macos|self_hosted)(_|$)/.test(sku))
+      return "actionsMinutes";
     return "other";
   }
-  if (product === "copilot" || product === "packages" || product === "codespaces") return product;
+  if (
+    product === "copilot" ||
+    product === "packages" ||
+    product === "codespaces"
+  )
+    return product;
   return "other";
 }
 

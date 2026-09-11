@@ -28,13 +28,11 @@ function row(overrides: Record<string, string | number> = {}) {
 
 async function upload(page: Page, rows: ReturnType<typeof row>[]) {
   await page.goto("/");
-  await page
-    .getByLabel("Upload billing CSV")
-    .setInputFiles({
-      name: "report.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(Papa.unparse(rows)),
-    });
+  await page.getByLabel("Upload billing CSV").setInputFiles({
+    name: "report.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(Papa.unparse(rows)),
+  });
   await expect(
     page.getByRole("tab", { name: "Overview", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
