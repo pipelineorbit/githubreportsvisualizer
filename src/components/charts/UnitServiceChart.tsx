@@ -6,7 +6,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -47,6 +48,143 @@ export const CHART_TOOLTIP = {
   color: "#f3f4f6",
 };
 
+function DailyServiceTrend({
+  data,
+  dimension,
+  metric,
+  heading,
+  unitType,
+  storageUnit,
+  multiYear,
+  colors,
+}: {
+  data: ServiceData[];
+  dimension: BillingDimension;
+  metric: BillingMetric;
+  heading: string;
+  unitType?: string;
+  storageUnit: "gb-hours" | "gb-months";
+  multiYear: boolean;
+  colors: Record<string, string>;
+}) {
+  const ranked = rankWithOther(
+    groupBilling(data, dimension, dimension === "sku"),
+    metric,
+  );
+  const timeline = rankedDailyData(ranked, metric);
+  const points = timeline.points.map((point) => {
+    const values = timeline.series.map(
+      (series) =>
+        [
+          series.key,
+          metric === "cost"
+            ? Number(point[series.key])
+            : displayQuantity(Number(point[series.key]), unitType, storageUnit),
+        ] as const,
+    );
+    return {
+      date: point.date,
+      ...Object.fromEntries(values),
+      total: values.reduce((total, [, value]) => total + value, 0),
+    };
+  });
+  const formatValue = metric === "cost" ? formatCurrency : formatNumber;
+
+  return (
+    <section aria-label={heading} className="min-w-0 space-y-3">
+      <h3 className="break-words text-base font-semibold">{heading}</h3>
+      <ResponsiveContainer
+        width="100%"
+        height={300}
+        className="overflow-hidden"
+      >
+        <ComposedChart
+          data={points}
+          accessibilityLayer
+          stackOffset="sign"
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="#374151"
+            vertical={false}
+          />
+          <XAxis
+            dataKey="date"
+            tickFormatter={(value) => formatChartDate(value, multiYear)}
+            stroke="#9ca3af"
+            fontSize={12}
+            minTickGap={24}
+          />
+          <YAxis
+            tickFormatter={
+              metric === "cost" ? formatCurrency : formatCompactNumber
+            }
+            stroke="#9ca3af"
+            fontSize={12}
+            width={64}
+          />
+          <Tooltip
+            contentStyle={CHART_TOOLTIP}
+            labelFormatter={(value) =>
+              formatChartDate(String(value), multiYear)
+            }
+            formatter={(value) => formatValue(Number(value))}
+          />
+          {timeline.series.map((series, index) => (
+            <Bar
+              key={series.key}
+              dataKey={series.key}
+              name={series.label}
+              fill={colors[ranked[index].key]}
+              stackId="daily"
+              maxBarSize={44}
+              isAnimationActive={false}
+            />
+          ))}
+          <Line
+            dataKey="total"
+            name={
+              metric === "cost"
+                ? "Total Net Cost"
+                : `Total ${usageUnitLabel(unitType, storageUnit)}`
+            }
+            type="linear"
+            stroke="#e5e7eb"
+            strokeWidth={2}
+            dot={{ r: 2 }}
+            isAnimationActive={false}
+            legendType="none"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <ul
+        aria-label={`${heading} legend`}
+        className="flex max-h-20 flex-wrap gap-x-4 gap-y-1 overflow-y-auto text-xs text-gray-300"
+      >
+        {timeline.series.map((series, index) => (
+          <li
+            key={series.key}
+            className="flex min-w-0 max-w-full items-center gap-1"
+          >
+            <span
+              className="h-2 w-2 shrink-0"
+              style={{ backgroundColor: colors[ranked[index].key] }}
+            />
+            <span className="truncate" title={series.label}>
+              {series.label}
+            </span>
+          </li>
+        ))}
+        <li className="flex items-center gap-1">
+          <span className="h-0.5 w-3 bg-gray-200" />
+          Total
+        </li>
+      </ul>
+    </section>
+  );
+}
+
 export function UnitServiceChart({
   data,
   title,
@@ -60,7 +198,7 @@ export function UnitServiceChart({
   storageUnit?: "gb-hours" | "gb-months";
   initialDimension?: BillingDimension;
 }) {
-  const [dimension, setDimension] =
+  const [requestedDimension, setDimension] =
     useState<BillingDimension>(initialDimension);
   const summary = summarizeBilling(data);
   const dimensions: { value: BillingDimension; label: string }[] = [
@@ -69,6 +207,17 @@ export function UnitServiceChart({
     { value: "organization", label: "Organization" },
     { value: "costCenter", label: "Cost Center" },
   ];
+  if (data.some((item) => item.workflowPath))
+    dimensions.push({ value: "workflowPath", label: "Workflow" });
+  if (data.some((item) => item.username))
+    dimensions.push({ value: "username", label: "User" });
+  if (data.some((item) => item.model))
+    dimensions.push({ value: "model", label: "Model" });
+  const dimension = dimensions.some(
+    (option) => option.value === requestedDimension,
+  )
+    ? requestedDimension
+    : initialDimension;
   const name =
     dimensions.find((entry) => entry.value === dimension)?.label ?? "SKU";
   const grouped = groupBilling(data, dimension, dimension === "sku");
@@ -82,6 +231,13 @@ export function UnitServiceChart({
             : `${group.data[0].sku} (unit not reported)`,
         }));
   const multiYear = spansMultipleYears(data.map((item) => item.date));
+  const dailyDimensions = [{ value: dimension, label: name }];
+  if (
+    dimension !== "organization" &&
+    new Set(data.map((item) => item.organization || "")).size > 1
+  ) {
+    dailyDimensions.push({ value: "organization", label: "Organization" });
+  }
 
   if (!data.length)
     return (
@@ -154,6 +310,57 @@ export function UnitServiceChart({
           prefix={title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
         />
       </div>
+      <section
+        aria-label="Daily Cost and Usage"
+        className="space-y-5 border-t border-gray-800 pt-6"
+      >
+        <h2 className="text-lg font-semibold">Daily Cost and Usage</h2>
+        {dailyDimensions.map((dailyDimension) => {
+          const colors = Object.fromEntries(
+            groupBilling(
+              data,
+              dailyDimension.value,
+              dailyDimension.value === "sku",
+            )
+              .map((group) => group.key)
+              .sort()
+              .map((key, index) => [
+                key,
+                CHART_COLORS[index % (CHART_COLORS.length - 1)],
+              ]),
+          );
+          colors.remainder = CHART_COLORS[CHART_COLORS.length - 1];
+          return (
+            <div
+              key={dailyDimension.value}
+              className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2"
+            >
+              <DailyServiceTrend
+                data={data}
+                dimension={dailyDimension.value}
+                metric="cost"
+                heading={`Daily Net Cost by ${dailyDimension.label}`}
+                storageUnit={storageUnit}
+                multiYear={multiYear}
+                colors={colors}
+              />
+              {summary.usageGroups.map((group) => (
+                <DailyServiceTrend
+                  key={group.key}
+                  data={group.data}
+                  dimension={dailyDimension.value}
+                  metric="quantity"
+                  heading={`Daily Usage (${group.unitType ? usageUnitLabel(group.unitType, storageUnit) : `${group.data[0].sku}; unit not reported`}) by ${dailyDimension.label}`}
+                  unitType={group.unitType}
+                  storageUnit={storageUnit}
+                  multiYear={multiYear}
+                  colors={colors}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </section>
       {sections.map((section) => {
         const groups = groupBilling(
           section.data,
@@ -161,7 +368,6 @@ export function UnitServiceChart({
           dimension === "sku",
         );
         const ranked = rankWithOther(groups, breakdown);
-        const timeline = rankedDailyData(ranked, breakdown);
         const display = (value: number) =>
           breakdown === "cost"
             ? value
@@ -170,15 +376,6 @@ export function UnitServiceChart({
           breakdown === "cost"
             ? formatCurrency(value)
             : formatNumber(display(value));
-        const points = timeline.points.map((point) => ({
-          ...point,
-          ...Object.fromEntries(
-            timeline.series.map((series) => [
-              series.key,
-              display(Number(point[series.key])),
-            ]),
-          ),
-        }));
         const bars = ranked.map((group, index) => ({
           name: group.label,
           index: index + 1,
@@ -200,94 +397,7 @@ export function UnitServiceChart({
                   : "No reported usage for this selection."}
               </p>
             ) : (
-              <div className="grid min-w-0 gap-6 xl:grid-cols-2">
-                <div className="min-w-0">
-                  <h4 className="mb-3 text-sm font-medium text-gray-300">
-                    Daily {section.label}
-                  </h4>
-                  <ResponsiveContainer
-                    width="100%"
-                    height={300}
-                    className="overflow-hidden"
-                  >
-                    <BarChart
-                      data={points}
-                      accessibilityLayer
-                      stackOffset="sign"
-                      margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#374151"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={(value) =>
-                          formatChartDate(value, multiYear)
-                        }
-                        stroke="#9ca3af"
-                        fontSize={12}
-                        minTickGap={24}
-                      />
-                      <YAxis
-                        tickFormatter={
-                          breakdown === "cost"
-                            ? formatCurrency
-                            : formatCompactNumber
-                        }
-                        stroke="#9ca3af"
-                        fontSize={12}
-                        width={64}
-                      />
-                      <Tooltip
-                        contentStyle={CHART_TOOLTIP}
-                        labelFormatter={(value) =>
-                          formatChartDate(String(value), multiYear)
-                        }
-                        formatter={(value) =>
-                          breakdown === "cost"
-                            ? formatCurrency(Number(value))
-                            : formatNumber(Number(value))
-                        }
-                      />
-                      <Legend
-                        content={() => (
-                          <ul className="mt-2 flex max-h-16 flex-wrap gap-x-4 gap-y-1 overflow-y-auto text-xs text-gray-300">
-                            {timeline.series.map((series, index) => (
-                              <li
-                                key={series.key}
-                                className="flex min-w-0 max-w-full items-center gap-1"
-                              >
-                                <span
-                                  className="h-2 w-2 shrink-0"
-                                  style={{
-                                    backgroundColor:
-                                      CHART_COLORS[index % CHART_COLORS.length],
-                                  }}
-                                />
-                                <span className="truncate" title={series.label}>
-                                  {series.label}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      />
-                      {timeline.series.map((series, index) => (
-                        <Bar
-                          key={series.key}
-                          dataKey={series.key}
-                          name={series.label}
-                          fill={CHART_COLORS[index % CHART_COLORS.length]}
-                          stackId="usage"
-                          maxBarSize={44}
-                          isAnimationActive={false}
-                        />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+              <div className="min-w-0">
                 <div className="min-w-0">
                   <h4 className="mb-3 text-sm font-medium text-gray-300">
                     Ranked {name}s

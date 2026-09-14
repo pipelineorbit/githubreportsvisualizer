@@ -163,6 +163,27 @@ test("keeps Codespaces and Packages units separate and converts only storage", a
     .click();
   await page.getByRole("tab", { name: "Codespaces", exact: true }).click();
   await expect(
+    page
+      .getByRole("region", { name: "Daily Net Cost by SKU", exact: true })
+      .getByRole("application"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (core-hours) by SKU",
+        exact: true,
+      })
+      .getByRole("application"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (GB-hours) by SKU",
+        exact: true,
+      })
+      .getByRole("application"),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: "core-hours by SKU", exact: true }),
   ).toBeVisible();
   await expect(
@@ -370,6 +391,209 @@ test("supports detailed Copilot data and keyboard tab navigation", async ({
   ).toHaveCount(3);
 });
 
+test("keeps daily cost and usage visible together across modes and filters", async ({
+  page,
+}, testInfo) => {
+  await upload(page, [
+    row({
+      product: "actions",
+      sku: "actions_linux",
+      unit_type: "minutes",
+      quantity: 60,
+      gross_amount: 0.36,
+      discount_amount: 0.36,
+      net_amount: 0,
+      repository: "build",
+      organization: "alpha",
+    }),
+    row({
+      date: "2026-09-02",
+      product: "actions",
+      sku: "actions_linux",
+      unit_type: "minutes",
+      quantity: 120,
+      gross_amount: 0.72,
+      discount_amount: 0.72,
+      net_amount: 0,
+      repository: "test",
+      organization: "beta",
+    }),
+  ]);
+  await page.getByRole("tab", { name: "Actions Minutes", exact: true }).click();
+  const cost = page.getByRole("region", {
+    name: "Daily Net Cost by Repository",
+    exact: true,
+  });
+  const usage = page.getByRole("region", {
+    name: "Daily Usage (minutes) by Repository",
+    exact: true,
+  });
+  await expect(cost.getByRole("application")).toBeVisible();
+  await expect(usage.getByRole("application")).toBeVisible();
+  await expect(
+    usage.locator(".recharts-bar-rectangle path").first(),
+  ).toBeVisible();
+  await expect(cost.locator(".recharts-line-dot").first()).toBeVisible();
+  await expect(cost.locator(".recharts-line-curve")).toHaveAttribute(
+    "d",
+    /^M.+L/,
+  );
+  await expect(cost.getByText("Sep 1", { exact: true })).toBeVisible();
+  await expect(cost.getByText("Sep 2", { exact: true })).toBeVisible();
+  const costColor = await cost
+    .getByRole("listitem")
+    .filter({ hasText: /^build$/ })
+    .locator("span")
+    .first()
+    .getAttribute("style");
+  const usageColor = await usage
+    .getByRole("listitem")
+    .filter({ hasText: /^build$/ })
+    .locator("span")
+    .first()
+    .getAttribute("style");
+  expect(costColor).toBe(usageColor);
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Net Cost by Organization",
+        exact: true,
+      })
+      .getByRole("application"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by Organization",
+        exact: true,
+      })
+      .getByRole("application"),
+  ).toBeVisible();
+  await page
+    .getByRole("region", { name: "Daily Cost and Usage", exact: true })
+    .screenshot({ path: testInfo.outputPath("daily-actions-desktop.png") });
+  await page
+    .getByRole("group", { name: "Breakdown By", exact: true })
+    .getByRole("button", { name: "Usage Volume", exact: true })
+    .click();
+  await expect(cost.getByRole("application")).toBeVisible();
+  await expect(usage.getByRole("application")).toBeVisible();
+  await page
+    .getByRole("group", { name: "Actions Minutes grouping", exact: true })
+    .getByRole("button", { name: "Organization", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Net Cost by Organization",
+        exact: true,
+      })
+      .getByRole("application"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by Organization",
+        exact: true,
+      })
+      .getByRole("application"),
+  ).toBeVisible();
+  await page.getByLabel("Organization", { exact: true }).selectOption("alpha");
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Net Cost by Organization",
+        exact: true,
+      })
+      .getByText("beta", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by Organization",
+        exact: true,
+      })
+      .getByText("alpha", { exact: true }),
+  ).toBeVisible();
+});
+
+test("shows detailed workflow and user daily trends without a repository filter", async ({
+  page,
+}) => {
+  await upload(page, [
+    row({
+      product: "actions",
+      sku: "actions_linux",
+      unit_type: "minutes",
+      quantity: 30,
+      repository: "build",
+      username: "alice",
+      workflow_path: ".github/workflows/build.yml",
+    }),
+    row({
+      date: "2026-09-02",
+      product: "actions",
+      sku: "actions_linux",
+      unit_type: "minutes",
+      quantity: 90,
+      repository: "test",
+      username: "bob",
+      workflow_path: ".github/workflows/test.yml",
+    }),
+  ]);
+  await page.getByRole("tab", { name: "Actions Minutes", exact: true }).click();
+  await expect(page.getByLabel("Repository", { exact: true })).toHaveValue("");
+  const grouping = page.getByRole("group", {
+    name: "Actions Minutes grouping",
+    exact: true,
+  });
+  await grouping.getByRole("button", { name: "Workflow", exact: true }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Daily Net Cost by Workflow", exact: true })
+      .getByRole("application"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by Workflow",
+        exact: true,
+      })
+      .getByText(".github/workflows/build.yml", { exact: true }),
+  ).toBeVisible();
+  await grouping.getByRole("button", { name: "User", exact: true }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Daily Net Cost by User", exact: true })
+      .getByText("alice", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by User",
+        exact: true,
+      })
+      .getByText("bob", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Repository", { exact: true }).selectOption("test");
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by User",
+        exact: true,
+      })
+      .getByText("alice", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (minutes) by User",
+        exact: true,
+      })
+      .getByText("bob", { exact: true }),
+  ).toBeVisible();
+});
+
 test("retains fully discounted usage with an explicit zero-charge state", async ({
   page,
 }) => {
@@ -388,7 +612,15 @@ test("retains fully discounted usage with an explicit zero-charge state", async 
   await expect(
     page.getByRole("heading", { name: "AI credits by SKU", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".recharts-bar-rectangle").first()).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", {
+        name: "Daily Usage (AI credits) by SKU",
+        exact: true,
+      })
+      .locator(".recharts-bar-rectangle path")
+      .first(),
+  ).toBeVisible();
 });
 
 test("renders nonblank responsive charts and keyboard-scrollable tables", async ({
@@ -419,6 +651,27 @@ test("renders nonblank responsive charts and keyboard-scrollable tables", async 
       )
       .toBe(true);
     await page.getByRole("tab", { name: "Copilot", exact: true }).click();
+    await expect(
+      page
+        .getByRole("region", { name: "Daily Net Cost by SKU", exact: true })
+        .getByRole("application"),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", {
+          name: "Daily Usage (AI credits) by SKU",
+          exact: true,
+        })
+        .getByRole("application"),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", {
+          name: "Daily Usage (seat-months) by SKU",
+          exact: true,
+        })
+        .getByRole("application"),
+    ).toBeVisible();
     await page
       .getByRole("group", { name: "Breakdown By" })
       .getByRole("button", { name: "Usage Volume" })

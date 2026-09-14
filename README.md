@@ -44,6 +44,16 @@ group, independent of table pagination, and omit invalid mixed-unit quantities.
 
 ## Trends and Usage
 
+Each service shows daily net cost and daily usage together, with a separate
+usage chart for each unit. Zero-charge days remain visible even when usage is
+fully discounted. The cost/usage selector changes rankings and tables without
+hiding the complementary daily charts.
+
+Daily charts can be grouped by repository, SKU, organization, or cost center.
+Organization comparisons also appear automatically for multi-organization
+selections. Detailed reports additionally enable workflow, user, and model
+grouping when those fields are present, without requiring a repository filter.
+
 Chart dates use UTC and include years for multi-year selections. Daily changes
 are calculated only against an available preceding calendar day; missing dates
 are not invented as zero usage. Select a chart date or daily table entry to see
